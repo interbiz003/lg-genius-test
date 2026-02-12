@@ -17,23 +17,6 @@ function makeTextResponse(text: string, buttons: any[] = [], quickReplies: any[]
   return response;
 }
 
-function makeCardResponse(title: string, description: string, buttons: any[] = [], quickReplies: any[] = []) {
-  const response: any = {
-    version: '2.0',
-    template: {
-      outputs: [{
-        basicCard: {
-          title,
-          description,
-          buttons: buttons.length > 0 ? buttons : undefined,
-        },
-      }],
-    },
-  };
-  if (quickReplies.length > 0) response.template.quickReplies = quickReplies;
-  return response;
-}
-
 // ── 메인 메뉴 ──
 function mainMenuResponse() {
   return makeTextResponse(
@@ -179,24 +162,12 @@ function searchResultResponse(query: string) {
   }
 
   const best = results[0];
-  const answer = best.item.answer;
+  let answer = best.item.answer;
 
+  // URL이 있으면 답변 텍스트 하단에 링크 안내 추가
   if (best.item.url && best.item.url.trim() !== '') {
-    const buttons = [{
-      action: 'webLink',
-      label: best.item.urlButton || '📄 상세보기',
-      webLinkUrl: best.item.url,
-    }];
-    const quickReplies: any[] = [];
-    if (results.length > 1 && results[1].score > 5) {
-      const secondQ = results[1].item.question;
-      quickReplies.push({
-        messageText: secondQ, action: 'message',
-        label: `🔍 ${secondQ.length > 12 ? secondQ.substring(0, 12) + '..' : secondQ}`,
-      });
-    }
-    quickReplies.push({ messageText: '처음으로', action: 'message', label: '🏠 처음으로' });
-    return makeCardResponse(best.item.question, answer, buttons, quickReplies);
+    const btnLabel = best.item.urlButton || '상세보기';
+    answer += `\n\n🔗 ${btnLabel}: ${best.item.url}`;
   }
 
   const quickReplies: any[] = [];

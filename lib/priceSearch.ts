@@ -1,6 +1,4 @@
-import * as XLSX from 'xlsx';
-import * as fs from 'fs';
-import * as path from 'path';
+import priceData from '../data/price-data.json';
 
 // ═══════════════════════════════════════
 // 타입 정의
@@ -29,76 +27,6 @@ interface ModelMatch {
 }
 
 // ═══════════════════════════════════════
-// 엑셀 데이터 로드 (서버 시작 시 1회 읽기, 캐싱)
-// ═══════════════════════════════════════
-let cachedData: PriceItem[] | null = null;
-
-function loadPriceData(): PriceItem[] {
-  if (cachedData) return cachedData;
-
-  const filePath = path.join(process.cwd(), 'data', 'price.xlsx');
-  const workbook = XLSX.readFile(filePath);
-
-  const allData: PriceItem[] = [];
-  const seen = new Set<string>();
-
-  // 3개 시트 모두 읽기 (가격 동일하므로 중복 제거)
-  const sheets = ['전자랜드-업데이트', '홈플러스-업데이트', '이마트-업데이트'];
-
-  for (const sheetName of sheets) {
-    const ws = workbook.Sheets[sheetName];
-    if (!ws) continue;
-
-    // 시트를 2차원 배열로 변환 (헤더 없이)
-    const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-
-    // 데이터는 5행(인덱스4)부터 시작
-    for (let i = 4; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || !row[4]) continue; // E열(모델코드) 없으면 스킵
-
-      const modelFull = String(row[4] || '').trim();
-      if (!modelFull) continue;
-
-      const careType = String(row[7] || '').trim();   // H열: 케어십형태
-      const careCombined = String(row[10] || '').trim(); // K열: 구분자
-
-      // 중복 제거 (같은 모델+케어십 = 같은 가격)
-      const key = `${modelFull}|${careCombined}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      const safeNum = (val: any): number | null => {
-        if (val === null || val === undefined || val === '' || val === 0) return null;
-        const n = Number(val);
-        return isNaN(n) ? null : Math.round(n);
-      };
-
-      allData.push({
-        modelFull,
-        product: String(row[3] || '').trim(),          // D열: 제품
-        careType,
-        careDetail: String(row[8] || '').trim(),        // I열: 케어십구분
-        visitCycle: String(row[9] || '').trim(),         // J열: 방문주기
-        careCombined,
-        price3y: safeNum(row[12]),       // M열: 3년 기본요금
-        price4y: safeNum(row[13]),       // N열: 4년 기본요금
-        price5y: safeNum(row[16]),       // Q열: 5년 기본요금
-        price6y: safeNum(row[19]),       // T열: 6년 기본요금
-        prepay30_lump: safeNum(row[22]), // W열: 30% 선납금
-        prepay30_monthly: safeNum(row[23]), // X열: 30% 월구독
-        prepay50_lump: safeNum(row[26]), // AA열: 50% 선납금
-        prepay50_monthly: safeNum(row[27]), // AB열: 50% 월구독
-      });
-    }
-  }
-
-  cachedData = allData;
-  console.log(`[가격표] ${allData.length}개 항목 로드 완료`);
-  return allData;
-}
-
-// ═══════════════════════════════════════
 // 모델명 정규화
 // ═══════════════════════════════════════
 function normalizeModel(input: string): string {
@@ -116,7 +44,7 @@ function extractBaseModel(fullCode: string): string {
 // 모델명으로 검색
 // ═══════════════════════════════════════
 export function searchPrice(query: string): ModelMatch | null {
-  const data = loadPriceData();
+  const data = priceData as PriceItem[];
   const queryNorm = normalizeModel(query);
 
   if (queryNorm.length < 3) return null;
@@ -166,7 +94,7 @@ function groupByModel(items: PriceItem[]): ModelMatch {
 // 모델 + 케어십 조회
 // ═══════════════════════════════════════
 export function getPriceByModelAndCare(query: string, careType: string): PriceItem | null {
-  const data = loadPriceData();
+  const data = priceData as PriceItem[];
   const queryNorm = normalizeModel(query);
 
   return data.find(item => {
