@@ -83,6 +83,22 @@ export function findByQuestion(question: string): FaqItem | null {
   return data.find(item => item.question === question) || null;
 }
 
+// ── 키워드로 메뉴 항목 찾기 (메뉴만) ──
+export function findMenuByKeyword(query: string): FaqItem | null {
+  const data = faqData as FaqItem[];
+  const queryLower = applySynonyms(query.toLowerCase().trim());
+  
+  for (const item of data) {
+    if (item.type !== 'menu' && item.type !== 'menu_with_answer') continue;
+    for (const keyword of item.keywords) {
+      if (queryLower === keyword.toLowerCase()) {
+        return item;
+      }
+    }
+  }
+  return null;
+}
+
 // ── 키워드 검색 (메뉴 항목 제외, 답변만) ──
 export function searchFaq(query: string): SearchResult[] {
   const data = faqData as FaqItem[];

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchFaq, findByQuestion, FaqItem } from '../../../lib/search';
+import { searchFaq, findByQuestion, findMenuByKeyword, FaqItem } from '../../../lib/search';
 import { searchPrice, formatPriceResponse, looksLikeModelName } from '../../../lib/priceSearch';
 
 // ═══════════════════════════════════════
@@ -8,12 +8,10 @@ import { searchPrice, formatPriceResponse, looksLikeModelName } from '../../../l
 function makeResponse(item: FaqItem) {
   let text = item.answer;
 
-  // URL이 있으면 답변에 링크 추가
   if (item.url && item.url.trim() !== '') {
     text += `\n\n🔗 ${item.urlButton || '상세보기'}: ${item.url}`;
   }
 
-  // quickButtons → 카카오 quickReplies 변환
   const quickReplies = (item.quickButtons || []).map(btn => ({
     messageText: btn.text,
     action: 'message' as const,
@@ -117,12 +115,10 @@ function searchResultResponse(query: string) {
 
   const best = results[0];
 
-  // 1위 확실 → 바로 답변
   if (best.score >= 30) {
     return makeResponse(best.item);
   }
 
-  // 충돌 감지
   if (results.length >= 2) {
     const scoreRatio = results[1].score / best.score;
     if (scoreRatio >= 0.7) {
@@ -155,32 +151,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(main ? makeResponse(main) : makeTextResponse('안녕하세요!'));
     }
 
-    // 1. question 정확히 일치하는 항목 찾기 (메뉴 & 답변 모두)
+    // 1. question 정확히 일치 (버튼 클릭 시)
     const exactMatch = findByQuestion(utterance);
     if (exactMatch) {
       return NextResponse.json(makeResponse(exactMatch));
     }
 
-    // 2. "처음으로" 등 메인메뉴 키워드
+    // 2. 메인메뉴 키워드
     const menuKeywords = ['처음으로', '홈', '시작', '도움말'];
     if (menuKeywords.includes(utterance)) {
       const main = findByQuestion('메인메뉴');
       return NextResponse.json(main ? makeResponse(main) : makeTextResponse('안녕하세요!'));
     }
 
-    // 3. 가격 단계별 조회
+    // 3. 메뉴 키워드 매칭 (카드사명, 카테고리 등 → 서브메뉴 우선)
+    const menuMatch = findMenuByKeyword(utterance);
+    if (menuMatch) {
+      return NextResponse.json(makeResponse(menuMatch));
+    }
+
+    // 4. 가격 단계별 조회
     if (utterance.includes('::')) {
       const stepResult = priceStepResponse(utterance);
       if (stepResult) return NextResponse.json(stepResult);
     }
 
-    // 4. 모델명 → 가격 조회
+    // 5. 모델명 → 가격 조회
     if (looksLikeModelName(utterance)) {
       const stepResult = priceStepResponse(utterance);
       if (stepResult) return NextResponse.json(stepResult);
     }
 
-    // 5. FAQ 키워드 검색
+    // 6. FAQ 키워드 검색
     return NextResponse.json(searchResultResponse(utterance));
 
   } catch (error) {
