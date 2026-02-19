@@ -36,10 +36,15 @@ function categoryMenuResponse(category: string) {
     '계약': {
       title: '📋 계약 관련 어떤 내용이 궁금하세요?',
       items: [
-        { label: '미납 정책', text: '미납/납부자 변경' }, { label: '해약금', text: '해약금' },
-        { label: '명의변경', text: '명의변경' }, { label: '결합할인', text: '결합할인 해지' },
-        { label: '해지', text: '구독해약' }, { label: '선납', text: '선납 할부' },
+        { label: '미납 정책', text: '미납/납부자 변경' },
+        { label: '해약금', text: '해약금' },
+        { label: '명의변경', text: '명의변경' },
+        { label: '결합할인', text: '결합할인율' },
+        { label: '해지', text: '구독해약' },
+        { label: '선납', text: '선납 할인율' },
         { label: '일시불 전환', text: '일시불 전환' },
+        { label: '이사 시', text: '이삿짐센터' },
+        { label: '해외 이민', text: '해외 이민' },
       ],
     },
     '제휴카드': {
@@ -55,7 +60,7 @@ function categoryMenuResponse(category: string) {
       title: '🔧 케어서비스 관련 어떤 내용이 궁금하세요?',
       items: [
         { label: '케어서비스 안내', text: '케어서비스' },
-        { label: '소모품', text: '공청기 필터 교체 주기' },
+        { label: '배송 분실', text: '배송 분실' },
       ],
     },
     '가격표': {
@@ -83,6 +88,7 @@ function categoryMenuResponse(category: string) {
 // ═══════════════════════════════════════
 // 제휴카드 단계별 플로우
 // 제휴카드 → 카드사 선택 → 혜택/실적확인/실적제외
+// 각 세부 답변 뒤 → [카드 혜택] [다른 카드 조회]
 // ═══════════════════════════════════════
 const cardDetailMenu: Record<string, { label: string; text: string }[]> = {
   '국민카드': [
@@ -108,6 +114,24 @@ const cardDetailMenu: Record<string, { label: string; text: string }[]> = {
   ],
 };
 
+// 카드사 세부 답변에 해당하는 대표질문 목록 (이 질문이 매칭되면 카드 전용 버튼 사용)
+const cardDetailQuestions = new Set([
+  '국민카드 할인', '국민카드 실적확인', '국민카드 실적제외',
+  '롯데카드 혜액', '롯데카드 실적 확인', '롯데카드 실적제외',
+  '신한카드 할인', '신한카드 실적확인', '신한카드 실적제외', '신한카드 프로모션',
+  '우리카드 할인', '우리카드 실적확인', '우리카드 실적제외 항목',
+]);
+
+// 대표질문 → 어느 카드사 소속인지 매핑
+function getCardNameFromQuestion(question: string): string | null {
+  for (const [cardName, items] of Object.entries(cardDetailMenu)) {
+    for (const item of items) {
+      if (item.text === question) return cardName;
+    }
+  }
+  return null;
+}
+
 function cardFlowResponse(cardName: string) {
   const menu = cardDetailMenu[cardName];
   if (!menu) return null;
@@ -121,7 +145,7 @@ function cardFlowResponse(cardName: string) {
   return makeTextResponse(`💳 ${cardName} — 어떤 정보가 궁금하세요?`, [], quickReplies);
 }
 
-// "카드 혜택", "실적제외", "실적확인" 등 역방향 → 카드사 선택
+// "혜택", "실적제외", "실적확인" → 카드사 선택
 function cardReverseFlowResponse(topic: string) {
   const topicLabel: Record<string, string> = {
     '혜택': '혜택/할인', '할인': '혜택/할인', '카드 혜택': '혜택/할인', '카드 할인': '혜택/할인',
@@ -129,15 +153,17 @@ function cardReverseFlowResponse(topic: string) {
   };
   const label = topicLabel[topic] || topic;
 
-  const quickReplies = [
-    { messageText: '국민카드', action: 'message' as const, label: '국민카드' },
-    { messageText: '롯데카드', action: 'message' as const, label: '롯데카드' },
-    { messageText: '신한카드', action: 'message' as const, label: '신한카드' },
-    { messageText: '우리카드', action: 'message' as const, label: '우리카드' },
-    { messageText: '처음으로', action: 'message' as const, label: '🏠 처음으로' },
-  ];
-
-  return makeTextResponse(`💳 ${label} — 어떤 카드사를 확인하시겠어요?`, [], quickReplies);
+  return makeTextResponse(
+    `💳 ${label} — 어떤 카드사를 확인하시겠어요?`,
+    [],
+    [
+      { messageText: '국민카드', action: 'message', label: '국민카드' },
+      { messageText: '롯데카드', action: 'message', label: '롯데카드' },
+      { messageText: '신한카드', action: 'message', label: '신한카드' },
+      { messageText: '우리카드', action: 'message', label: '우리카드' },
+      { messageText: '처음으로', action: 'message', label: '🏠 처음으로' },
+    ]
+  );
 }
 
 // ═══════════════════════════════════════
@@ -210,17 +236,32 @@ function directAnswer(results: { item: any; score: number }[]) {
   }
 
   const quickReplies: any[] = [];
+  const question = best.item.question;
 
-  // 엑셀에서 설정한 버튼이 있으면 그걸 사용
-  if (best.item.quickButtons && best.item.quickButtons.length > 0) {
+  // ── 카드 세부 답변이면 → [해당 카드 혜택] [다른 카드 조회] ──
+  if (cardDetailQuestions.has(question)) {
+    const cardName = getCardNameFromQuestion(question);
+    if (cardName) {
+      // 해당 카드 혜택 버튼 (현재 답변이 혜택이 아닌 경우만)
+      const benefitItem = cardDetailMenu[cardName]?.find(i => i.label === '혜택/할인');
+      if (benefitItem && benefitItem.text !== question) {
+        quickReplies.push({ messageText: benefitItem.text, action: 'message', label: `${cardName} 혜택` });
+      }
+      quickReplies.push({ messageText: cardName, action: 'message', label: `💳 ${cardName} 다른 메뉴` });
+      quickReplies.push({ messageText: '제휴카드', action: 'message', label: '💳 다른 카드사' });
+    }
+  }
+  // ── 엑셀에서 설정한 버튼이 있으면 사용 ──
+  else if (best.item.quickButtons && best.item.quickButtons.length > 0) {
     for (const btn of best.item.quickButtons.slice(0, 5)) {
       quickReplies.push({
         messageText: btn, action: 'message',
         label: btn.length > 14 ? btn.substring(0, 14) + '..' : btn,
       });
     }
-  } else {
-    // 없으면 검색 결과에서 관련 질문 추천
+  }
+  // ── 없으면 검색 결과에서 관련 질문 추천 ──
+  else {
     for (let i = 1; i < Math.min(results.length, 3); i++) {
       if (results[i].score > 5) {
         const q = results[i].item.question;
@@ -230,11 +271,6 @@ function directAnswer(results: { item: any; score: number }[]) {
         });
       }
     }
-  }
-
-  // 카드 관련 답변이면 "다른 카드사" 버튼 추가
-  if (best.item.category === '판촉') {
-    quickReplies.push({ messageText: '제휴카드', action: 'message', label: '💳 다른 카드사' });
   }
 
   quickReplies.push({ messageText: '처음으로', action: 'message', label: '🏠 처음으로' });
@@ -289,6 +325,43 @@ function searchResultResponse(query: string) {
 }
 
 // ═══════════════════════════════════════
+// 특수 매핑 (버튼에서 들어오는 텍스트 → 원하는 답변으로 연결)
+// ═══════════════════════════════════════
+const specialMapping: Record<string, () => ReturnType<typeof makeTextResponse>> = {
+  // 계약 > 결합할인 → 결합할인율 답변 + 버튼
+  '결합할인': () => {
+    const results = searchFaq('결합할인율');
+    if (results.length > 0) {
+      const item = results[0].item;
+      let answer = item.answer;
+      if (item.url) answer += `\n\n🔗 ${item.urlButton || '상세보기'}: ${item.url}`;
+      return makeTextResponse(answer, [], [
+        { messageText: '결합할인 해지', action: 'message', label: '결합할인 해지' },
+        { messageText: '선납 할인율', action: 'message', label: '선납할인' },
+        { messageText: '처음으로', action: 'message', label: '🏠 처음으로' },
+      ]);
+    }
+    return searchResultResponse('결합할인율');
+  },
+  // 계약 > 선납 → 선납 할인율 답변 + 버튼
+  '선납': () => {
+    const results = searchFaq('선납 할인율');
+    if (results.length > 0) {
+      const item = results[0].item;
+      let answer = item.answer;
+      if (item.url) answer += `\n\n🔗 ${item.urlButton || '상세보기'}: ${item.url}`;
+      return makeTextResponse(answer, [], [
+        { messageText: '선납 할부', action: 'message', label: '선납금 결제' },
+        { messageText: '선납금 명의', action: 'message', label: '선납금 결제 명의' },
+        { messageText: '선납금 실적', action: 'message', label: '선납금 실적' },
+        { messageText: '처음으로', action: 'message', label: '🏠 처음으로' },
+      ]);
+    }
+    return searchResultResponse('선납 할인율');
+  },
+};
+
+// ═══════════════════════════════════════
 // POST 핸들러
 // ═══════════════════════════════════════
 export async function POST(request: NextRequest) {
@@ -305,36 +378,43 @@ export async function POST(request: NextRequest) {
     const categoryKeywords: Record<string, string> = {
       '계약': '계약', '계약 안내': '계약',
       '판촉': '제휴카드', '제휴카드': '제휴카드',
-      '케어서비스': '케어서비스', '케어': '케어서비스',
+      '케어서비스': '케어서비스 메뉴', '케어': '케어서비스 메뉴',
       '가격표': '가격표', '가격 조회': '가격표', '가격조회': '가격표',
       '기타': '기타', '기타 문의': '기타',
     };
-    if (categoryKeywords[utterance]) return NextResponse.json(categoryMenuResponse(categoryKeywords[utterance]));
+    if (categoryKeywords[utterance]) {
+      const cat = categoryKeywords[utterance];
+      if (cat === '케어서비스 메뉴') return NextResponse.json(categoryMenuResponse('케어서비스'));
+      return NextResponse.json(categoryMenuResponse(cat));
+    }
 
-    // 3. 제휴카드 단계별 플로우
-    //    카드사명 → 세부 메뉴 (혜택/실적확인/실적제외)
+    // 3. 특수 매핑 (결합할인, 선납 등)
+    if (specialMapping[utterance]) {
+      return NextResponse.json(specialMapping[utterance]());
+    }
+
+    // 4. 제휴카드 단계별 플로우
     if (cardDetailMenu[utterance]) {
       return NextResponse.json(cardFlowResponse(utterance)!);
     }
-    //    "카드 혜택", "실적제외", "실적확인" → 카드사 선택
     const reverseCardKeywords = ['혜택', '할인', '카드 혜택', '카드 할인', '실적제외', '실적확인'];
     if (reverseCardKeywords.includes(utterance)) {
       return NextResponse.json(cardReverseFlowResponse(utterance));
     }
 
-    // 4. 가격 단계별 조회 (:: 포함)
+    // 5. 가격 단계별 조회
     if (utterance.includes('::')) {
       const stepResult = priceStepResponse(utterance);
       if (stepResult) return NextResponse.json(stepResult);
     }
 
-    // 5. 모델명 → 가격 조회
+    // 6. 모델명 → 가격 조회
     if (looksLikeModelName(utterance)) {
       const stepResult = priceStepResponse(utterance);
       if (stepResult) return NextResponse.json(stepResult);
     }
 
-    // 6. FAQ 키워드 검색
+    // 7. FAQ 키워드 검색
     return NextResponse.json(searchResultResponse(utterance));
 
   } catch (error) {
@@ -347,5 +427,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'ok', message: 'LG 구독 챗봇 API v4', timestamp: new Date().toISOString() });
+  return NextResponse.json({ status: 'ok', message: 'LG 구독 챗봇 API v5', timestamp: new Date().toISOString() });
 }
