@@ -98,11 +98,29 @@ export function findMenuByKeyword(query: string): FaqItem | null {
   return null;
 }
 
+// ── 한국어 조사/어미 제거 ──
+function removeParticles(text: string): string[] {
+  const particles = /(?:을|를|이|가|은|는|도|에서|에|의|로|으로|하고|싶은데|싶어요|싶어|되면|되나요|인가요|인데|할때|해야|어떻게|알려줘|보고싶|해줘|좀|나요|까요|때|해요|할까요|한가요|하려고|하려면|요)$/;
+  const words = text.split(/\s+/).filter(w => w.length >= 1);
+  const cleaned: string[] = [];
+  for (const word of words) {
+    let w = word;
+    for (let i = 0; i < 3; i++) {
+      const prev = w;
+      w = w.replace(particles, '');
+      if (w === prev) break;
+    }
+    if (w.length >= 1) cleaned.push(w);
+  }
+  return cleaned;
+}
+
 // ── FAQ 키워드 검색 ──
 export function searchFaq(query: string): SearchResult[] {
   const data = faqData as FaqItem[];
   const queryLower = query.toLowerCase().trim();
   const queryConverted = applySynonyms(queryLower);
+  const queryWords = removeParticles(queryConverted);
 
   const results: SearchResult[] = [];
 
@@ -116,18 +134,31 @@ export function searchFaq(query: string): SearchResult[] {
       score += 100;
     }
 
+    // 쿼리를 단어로 분리 (조사 제거된 queryWords 사용)
     for (const keyword of item.keywords) {
       const kwLower = keyword.toLowerCase();
 
       if (queryConverted === kwLower) {
+        // 정확 일치
         score += 20;
         matchedCount++;
-      } else if (queryConverted.includes(kwLower)) {
+      } else if (queryConverted.includes(kwLower) && kwLower.length >= 2) {
+        // 쿼리 안에 키워드 포함 ("배송 현황 확인" 안에 "배송")
         score += 10 + kwLower.length;
         matchedCount++;
       } else if (kwLower.includes(queryConverted) && queryConverted.length >= 2) {
+        // 키워드 안에 쿼리 포함
         score += 5;
         matchedCount++;
+      } else {
+        // 단어 단위 매칭 ("배송 현황 확인 하고 싶은데" → ["배송","현황","확인"] → "배송" 매칭)
+        for (const word of queryWords) {
+          if (word === kwLower || (word.length >= 2 && kwLower.includes(word)) || (kwLower.length >= 2 && word.includes(kwLower))) {
+            score += 8;
+            matchedCount++;
+            break;
+          }
+        }
       }
     }
 
