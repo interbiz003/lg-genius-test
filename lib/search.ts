@@ -139,14 +139,15 @@ export function searchFaq(query: string): SearchResult[] {
 
     for (const keyword of item.keywords) {
       const kwLower = keyword.toLowerCase();
+      const kwNoSpace = kwLower.replace(/\s+/g, '');  // 공백 제거 버전
 
-      if (queryConverted === kwLower) {
+      if (queryConverted === kwLower || queryConverted === kwNoSpace) {
         score += 20;
         matchedCount++;
-      } else if (queryConverted.includes(kwLower) && kwLower.length >= 2) {
+      } else if ((queryConverted.includes(kwLower) || queryConverted.includes(kwNoSpace)) && kwLower.length >= 2) {
         score += 10 + kwLower.length;
         matchedCount++;
-      } else if (kwLower.includes(queryConverted) && queryConverted.length >= 2) {
+      } else if ((kwLower.includes(queryConverted) || kwNoSpace.includes(queryConverted)) && queryConverted.length >= 2) {
         score += 5;
         matchedCount++;
       } else {
