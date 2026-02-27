@@ -11,10 +11,10 @@ const outputPath = path.join(dataDir, 'price-data.json');
 
 // 구독_CSMS2로 시작하는 xlsx 파일 자동 탐색
 const files = fs.readdirSync(dataDir);
-const priceFile = files.find(f => f.startsWith('구독_CSMS2') && f.endsWith('.xlsx'));
+const priceFile = files.find(f => f.startsWith('price_') && f.endsWith('.xlsx'));
 
 if (!priceFile) {
-  console.error('[오류] 구독_CSMS2_*.xlsx 파일을 찾을 수 없습니다');
+  console.error('[오류] price_YYMMDD.xlsx 파일을 찾을 수 없습니다');
   process.exit(1);
 }
 
