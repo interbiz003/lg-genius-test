@@ -1,4 +1,4 @@
-import faqData from '../data/faq.json';
+import rawFaqData from '../data/faq.json';
 
 interface QuickButton {
   label: string;
@@ -15,6 +15,26 @@ export interface FaqItem {
   urlButton: string;
   quickButtons?: QuickButton[];
 }
+
+// faq.json → FaqItem 변환 (followButtons → quickButtons)
+const faqData: FaqItem[] = (rawFaqData as any[]).map(item => {
+  const quickButtons: QuickButton[] = (item.followButtons || []).map((btn: string) => ({
+    label: btn,
+    text: btn,
+  }));
+
+  // 처음으로 버튼 자동 추가
+  if (item.type === 'faq' && quickButtons.length > 0) {
+    quickButtons.push({ label: '🏠 처음으로', text: '메인메뉴' });
+  }
+
+  return {
+    ...item,
+    url: item.url || '',
+    urlButton: item.urlButtonName || item.urlButton || '',
+    quickButtons: quickButtons.length > 0 ? quickButtons : undefined,
+  };
+});
 
 interface SearchResult {
   item: FaqItem;
